@@ -1,5 +1,6 @@
 # Hands-on-12-Spark-on-AWS
-# Serverless Spark ETL Pipeline on AWS
+
+## Serverless Spark ETL Pipeline on AWS
 
 This project is a hands-on assignment demonstrating a fully automated, event-driven serverless data pipeline on AWS.
 
@@ -16,13 +17,11 @@ The core problem this project solves is the need for manual data processing. In 
 2.  The S3 upload event instantly triggers an **AWS Lambda** function.
 3.  The Lambda function starts an **AWS Glue ETL job**.
 4.  The Glue job (running a PySpark script) reads the CSV, cleans it, and runs multiple Spark SQL queries to generate analytics (e.g., average ratings, top customers).
-5.  The final, aggregated results are written as Parquet files to a separate S3 "processed" bucket.
+5.  The final, aggregated results are written as Parquet/CSV files to a separate S3 "processed" bucket.
 
 ---
 
 ## 🏗️ Architecture
-
-
 
 **Data Flow:**
 `S3 (Upload) -> Lambda (Trigger) -> AWS Glue (Spark Job) -> S3 (Processed Results)`
@@ -48,9 +47,14 @@ Follow these steps to deploy the pipeline in your own AWS account.
 * Basic knowledge of S3, IAM, Lambda, and Glue
 
 ### 2. Create S3 Buckets
-Create two S3 buckets with globally unique names:
-* `handsonfinallanding`: This is where you will upload your raw data.
-* `handsonfinalprocessed`: This is where the processed data and query results will be stored.
+Create two S3 buckets with **globally unique names** (e.g., append your initials or account number):
+* `handsonfinallanding-<your-unique-identifier>`: This is where you will upload your raw data.
+* `handsonfinalprocessed-<your-unique-identifier>`: This is where the processed data and query results will be stored.
+
+> **Security Note:** Ensure **Default encryption** is set to **Server-side encryption with Amazon S3 managed keys (SSE-S3)** to avoid KMS decryption access errors during the Glue job.
+
+**Landing Bucket Verification:**
+![Landing Bucket Screenshot]<img width="1919" height="863" alt="landing_bucket" src="https://github.com/user-attachments/assets/808fa3ea-7557-41f2-ab06-e86e07ae61ec" />
 
 ### 3. Create IAM Role for AWS Glue
 Your Glue job needs permission to read from and write to S3.
@@ -59,20 +63,18 @@ Your Glue job needs permission to read from and write to S3.
 2.  Create a new **Role**.
 3.  Select **AWS service** as the trusted entity and choose **Glue** as the use case.
 4.  Attach the `AWSGlueServiceRole` managed policy.
-5.  Attach the `AmazonS3FullAccess` policy (for this demo) or a more restrictive policy that only grants access to your two buckets.
+5.  Attach the `AmazonS3FullAccess` policy.
 6.  Name the role `AWSGlueServiceRole-Reviews` and create it.
 
 ### 4. Create the AWS Glue ETL Job
 1.  Go to the **AWS Glue** service.
 2.  In the navigation pane, click on **ETL jobs**.
 3.  Select the **Spark script editor** option to create a new job.
-4.  Paste the contents of `src/glue_job_script.py` into the editor.
+4.  Paste the contents of `src/glue_job_script.py` into the editor. *(Ensure your script uses your globally unique bucket names!)*
 5.  Go to the **Job details** tab.
 6.  Set the **Name** to `process_reviews_job`.
 7.  Select the `AWSGlueServiceRole-Reviews` **IAM Role** you created in the previous step.
 8.  Save the job.
-
-> **Note:** The script is already configured to use the `handsonfinallanding` and `handsonfinalprocessed` buckets.
 
 ### 5. Create the Lambda Trigger Function
 This function will start the Glue job when a file is uploaded.
@@ -81,11 +83,11 @@ This function will start the Glue job when a file is uploaded.
 2.  Select **Author from scratch**.
 3.  Set the **Function name** to `start_glue_job_trigger`.
 4.  Set the **Runtime** to **Python 3.10** (or any modern Python runtime).
-5.  **Permissions:** Under "Change default execution role," select **Create a new role with basic Lambda permissions**. This role will be automatically named.
+5.  **Permissions:** Under "Change default execution role," select **Create a new role with basic Lambda permissions**. 
 6.  Create the function.
 
 #### 5a. Add Lambda Code
-Paste the contents of `src/lambda_function.py` into the code editor. Make sure the `GLUE_JOB_NAME` variable matches the name of your Glue job (`process_reviews_job`).
+Paste the contents of `src/lambda_function.py` into the code editor. Make sure the `job_name` variable matches the name of your Glue job (`process_reviews_job`).
 
 #### 5b. Add Lambda Permissions
 The new Lambda role needs permission to start a Glue job.
@@ -110,9 +112,13 @@ The new Lambda role needs permission to start a Glue job.
 1.  Go back to your Lambda function's main page.
 2.  Click **Add trigger**.
 3.  Select **S3** as the source.
-4.  Select your `handsonfinallanding` bucket.
-5.  Set the **Event type** to `s3:ObjectCreated:*` (or "All object create events").
+4.  Select your `handsonfinallanding-<your-unique-identifier>` bucket.
+5.  Set the **Event type** to `s3:ObjectCreated:*`.
 6.  Acknowledge the recursive invocation warning and click **Add**.
+
+**Lambda Function Verification:**
+![Lambda Function Screenshot]<img width="1919" height="875" alt="lambda_function" src="https://github.com/user-attachments/assets/3f12f80c-abfe-4cab-897b-c58590adac28" />
+
 
 ---
 
@@ -121,27 +127,31 @@ The new Lambda role needs permission to start a Glue job.
 Your pipeline is now fully deployed and automated!
 
 1.  Take the sample `reviews.csv` file from the `data/` directory.
-2.  Upload `reviews.csv` to the root of your `handsonfinallanding` S3 bucket.
+2.  Upload `reviews.csv` to the root of your `handsonfinallanding-<your-unique-identifier>` S3 bucket.
 3.  This will trigger the Lambda, which in turn starts the Glue job.
-4.  You can monitor the job's progress in the **AWS Glue** console under the **Monitoring** tab.
+4.  You can monitor the job's progress in the **AWS Glue** console under the **Runs** tab.
 
 ---
 
 ## 📈 Query Results
 
-After the job (which may take 2-3 minutes to run), navigate to your `handsonfinalprocessed` bucket. You will find the results in the `Athena Results/` folder, organized into sub-folders for each query:
+After the job succeeds (usually takes 2-3 minutes), navigate to your `handsonfinalprocessed-<your-unique-identifier>` bucket. You will find the results in the `Athena Results/` folder, organized into sub-folders for each query:
 
-* `s3://handsonfinalprocessed/Athena Results/daily_review_counts/`
-* `s3://handsonfinalprocessed/Athena Results/top_5_customers/`
-* `s3://handsonfinalprocessed/Athena Results/rating_distribution/`
+* `s3://handsonfinalprocessed-<your-unique-identifier>/Athena Results/product_avg_rating/`
+* `s3://handsonfinalprocessed-<your-unique-identifier>/Athena Results/daily_review_counts/`
+* `s3://handsonfinalprocessed-<your-unique-identifier>/Athena Results/top_5_customers/`
+* `s3://handsonfinalprocessed-<your-unique-identifier>/Athena Results/rating_distribution/`
 
-You will also find the complete, cleaned dataset in `s3://handsonfinalprocessed/processed-data/`.
+You will also find the complete, cleaned dataset in `s3://handsonfinalprocessed-<your-unique-identifier>/processed-data/`.
+
+**Processed Bucket Verification:**
+![Processed Bucket Screenshot]<img width="1919" height="867" alt="processed_bucket" src="https://github.com/user-attachments/assets/9f15ae4f-55ab-4d41-856a-e4b6400b9a91" />
 
 ---
 ## 🧹 Cleanup
 
 To avoid any future charges (especially if you're on the Free Tier), be sure to delete the resources you created:
-1.  Empty and delete the `handsonfinallanding` and `handsonfinalprocessed` S3 buckets.
+1.  Empty and delete the `handsonfinallanding-<your-unique-identifier>` and `handsonfinalprocessed-<your-unique-identifier>` S3 buckets.
 2.  Delete the `start_glue_job_trigger` Lambda function.
 3.  Delete the `process_reviews_job` Glue job.
 4.  Delete the `AWSGlueServiceRole-Reviews` IAM role.
